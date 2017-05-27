@@ -1,0 +1,2 @@
+# testmin
+Minimalist testing framework
