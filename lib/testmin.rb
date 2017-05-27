@@ -4,9 +4,8 @@ require 'fileutils'
 require 'open3'
 require 'getoptlong'
 
-# TestMin is a simple, minimalist testing framework. It evolved out of the need
-# for such a framework for Utilibase. TestMin will eventually be spun off into
-# its own project.
+# TestMin is a simple, minimalist testing framework. It is available on GitHub
+# at https://github.com/mikosullivan/testmin .
 
 # note clear as done
 ENV['clear_done'] = '1'
@@ -18,7 +17,7 @@ ENV['clear_done'] = '1'
 module TestMin
 	
 	# TestMin version
-	VERSION = '0.0.1'
+	VERSION = '0.0.2'
 	
 	# length for horizontal rules
 	HR_LENGTH = 100
