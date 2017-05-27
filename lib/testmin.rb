@@ -3,12 +3,18 @@ require 'json'
 require 'fileutils'
 require 'open3'
 require 'getoptlong'
+require 'benchmark'
+require 'timeout'
 
-# TestMin is a simple, minimalist testing framework. It is available on GitHub
-# at https://github.com/mikosullivan/testmin .
+
+# TestMin is a simple, minimalist testing framework. TestMin is on GitHub at
+# https://github.com/mikosullivan/testmin
 
 # note clear as done
+# NOTE: This setting is a leftover from an earlier version of TestMin. For now
+# just leave this line as it is. It won't get in the way of how TestMin works.
 ENV['clear_done'] = '1'
+
 
 
 ################################################################################
@@ -46,28 +52,10 @@ module TestMin
 		# should the user be prompted to submit the test results
 		'submit' => {
 			'request' => false,
+			'request-email' => false,
+			'request-comments' => false,
 			'url' => 'https://testmin.idocs.com/submit',
 			'title' => 'Idocs Testmin',
-			'messages' => {
-				'en' => {
-					# request to submit results
-					'submit-request' => <<~TEXT,
-					May this script submit these test results to [[title]]?
-					The results will be submitted to the Idocs TestMin service
-					where they will be publicly available. In addition to the
-					test results, the only information about your system will be
-					the operating system and version, the version of Ruby, and
-					the version of TestMin.
-					TEXT
-					
-					# request to add email address
-					'email-request' => <<~TEXT,
-					Would you like to send your email address? Your email will
-					not be displayed publicly. You will only be contacted to
-					about this project.
-					TEXT
-				}
-			}
 		},
 		
 		# messages
@@ -88,6 +76,30 @@ module TestMin
 				'submit-hold' => 'Submitting...',
 				'submit-success' => 'Test results successfully submitted.',
 				'submit-failure' => 'Submission of test results failed. Errors: [[errors]]',
+				'add-comments' => 'Add your comments here.',
+				
+				# request to submit results
+				'submit-request' => <<~TEXT,
+				May this script submit these test results to [[title]]?
+				The results will be submitted to the [[title]] service
+				where they will be publicly available. In addition to the
+				test results, the only information about your system will be
+				the operating system and version, the version of Ruby, and
+				the version of TestMin.
+				TEXT
+				
+				# request to add email address
+				'email-request' => <<~TEXT,
+				Would you like to send your email address? Your email will
+				not be publicly displayed. You will only be contacted to
+				about this project.
+				TEXT
+				
+				# request to add email address
+				'comments-request' => <<~TEXT,
+				Would you like to add some comments? Your comments will not
+				be publicly displayed.
+				TEXT
 				
 				# prompts
 				'yn' => '[Yes|No]',
@@ -226,15 +238,20 @@ module TestMin
 				in_settings[file_path] = true
 			end
 			
-			# get list of rb files in directory, except for dev files
-			Dir.glob('./*.rb').each do |file_path|
-				# remove leading ./
-				file_path = file_path.sub(/\A\.\//, '')
-				
+			# get list of executable in directory
+			Dir.glob('*').each do |file_path|
 				# skip dev files
-				if not file_path.match(/\Adev\./)
-					in_dir[file_path] = true
+				if file_path.match(/\Adev\./)
+					next
 				end
+				
+				# must be executable
+				if not File.executable?(file_path)
+					next
+				end
+				
+				# add to list of files in directory
+				in_dir[file_path] = true
 				
 				# remove from settings
 				in_settings.delete(file_path)
@@ -254,8 +271,7 @@ module TestMin
 				return false
 			end
 			
-			# loop through files setting, removing
-			# existing files from in_dir
+			# loop through files setting, removing existing files from in_dir
 			dir['settings']['files'].each do |file_path|
 				in_dir.delete(file_path)
 			end
@@ -263,7 +279,7 @@ module TestMin
 			# add remaining files to files list
 			in_dir.keys.each do |file|
 				puts '*** not in ' + DIR_SETTINGS_FILE + ': ' + dir['path'] + '/' + file
-				dir['files'].push(file)
+				dir['settings']['files'].push(file)
 			end
 		end
 		
@@ -284,6 +300,9 @@ module TestMin
 		dir_path_display = dir_path_display.sub(/\A\.\//, '')
 		TestMin.hr('title'=>dir_path_display, 'dash'=>'=')
 		
+		# initialize success to true
+		success = true
+		
 		# add directory to log
 		dir_files = {}
 		dir_log = {'dir_order'=>dir_order, 'files'=>dir_files}
@@ -300,26 +319,32 @@ module TestMin
 			# initialize file_order
 			file_order = 0
 			
-			# loop through files
-			dir['settings']['files'].each do |file_path|
-				# increment file order
-				file_order = file_order + 1
-				
-				# run file
-				success = TestMin.file_run(dir_files, file_path, file_order)
-				
-				# if failure, we're done
-				if not success
-					return false
+			# run test files in directory
+			mark = Benchmark.measure {
+				# loop through files
+				dir['settings']['files'].each do |file_path|
+					# increment file order
+					file_order = file_order + 1
+					
+					# run file
+					success = TestMin.file_run(dir_files, file_path, file_order)
+					
+					# if failure, we're done
+					if not success
+						break
+					end
 				end
-			end
+			}
+			
+			# note run-time
+			dir_log['run-time'] = mark.real
 		end
 		
 		# add a little room underneath dir
 		puts
 		
-		# return true
-		return true
+		# return success
+		return success
 	end
 	#
 	# dir_run
@@ -328,6 +353,8 @@ module TestMin
 	
 	#---------------------------------------------------------------------------
 	# file_run
+	# TODO: The code in this routine gets a litle speghettish. Need to clean it
+	# up.
 	#
 	def TestMin.file_run(dir_files, file_path, file_order)
 		# TestMin.hr(__method__.to_s)
@@ -342,28 +369,53 @@ module TestMin
 		# debug objects
 		debug_stdout = ''
 		debug_stderr = ''
+		completed = true
 		
-		# run file
-		Open3.popen3('./' + file_path) do |stdin, stdout, stderr, thread|
-			debug_stdout = stdout.read.chomp
-			debug_stderr = stderr.read.chomp
-		end
-		
-		# get results
-		results = TestMin.parse_results(debug_stdout)
-		
-		# determine success
-		if results.is_a?(Hash)
-			# get success
-			success = results.delete('testmin-success')
-			
-			# add other elements to details if any
-			if results.any?
-				file_log['details'] = results
+		# run file with benchmark
+		mark = Benchmark.measure {
+			# run file with timeout
+			Open3.popen3('./' + file_path) do |stdin, stdout, stderr, thread|
+				begin
+					Timeout::timeout(TestMin.settings['timeout']) {
+						debug_stdout = stdout.read.chomp
+						debug_stderr = stderr.read.chomp
+					}
+				rescue
+					Process.kill('KILL', thread.pid)
+					file_log['timed-out'] = TestMin.settings['timeout']
+					completed = false
+				rescue
+					completed = false
+				end
 			end
+		}
+		
+		# if completed
+		if completed
+			# get results
+			results = TestMin.parse_results(debug_stdout)
+			
+			# determine success
+			if results.is_a?(Hash)
+				# get success
+				success = results.delete('testmin-success')
+				
+				# add other elements to details if any
+				if results.any?
+					file_log['details'] = results
+				end
+			else
+				success = false
+			end
+		
+		# else not completed
 		else
 			success = false
 		end
+		
+		# add success and run time
+		file_log['success'] = success
+		file_log['run-time'] = mark.real
 		
 		# if failure
 		if not success
@@ -533,6 +585,7 @@ module TestMin
 		log['success'] = true
 		log['messages'] = []
 		log['dirs'] = {}
+		log['private'] = {}
 		
 		# get project id if there is one
 		if not TestMin.settings['project-id'].nil?
@@ -718,7 +771,6 @@ module TestMin
 		prompt = TestMin.message(
 			'submit-request',
 			'fields' => TestMin.settings['submit'],
-			'root' => TestMin.settings['submit']['messages'],
 		)
 		
 		# get results of user prompt
@@ -735,11 +787,15 @@ module TestMin
 	def TestMin.email_ask(results)
 		# TestMin.hr(__method__.to_s)
 		
+		# if not set to submit email, nothing to do
+		if not settings['submit']['request-email']
+			return true
+		end
+		
 		# get prompt
 		prompt = TestMin.message(
 			'email-request',
 			'fields' => TestMin.settings['submit'],
-			'root' => TestMin.settings['submit']['messages'],
 		)
 		
 		# add a little horizontal space
@@ -756,11 +812,6 @@ module TestMin
 		# get email
 		email = TestMin.get_line(prompt)
 		
-		# ensure results has private element
-		if not results['private'].is_a?(Hash)
-			results['private'] = {}
-		end
-		
 		# add to private
 		results['private']['email'] = email
 		
@@ -769,6 +820,66 @@ module TestMin
 	end
 	#
 	# email_ask
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# comments_ask
+	#
+	def TestMin.comments_ask(results)
+		# TestMin.hr(__method__.to_s)
+		
+		# early exit: no editor
+		if ENV['EDITOR'].nil?
+			return
+		end
+		
+		# if not set to submit comments, nothing to do
+		if not settings['submit']['request-comments']
+			return true
+		end
+		
+		# get prompt
+		prompt = TestMin.message(
+			'comments-request',
+			'fields' => TestMin.settings['submit'],
+		)
+		
+		# add a little horizontal space
+		puts
+		
+		# if the user wants to add email
+		if not TestMin.yes_no(prompt)
+			return true
+		end
+		
+		# build prompt for getting email
+		prompt = TestMin.message('add-comments')
+		
+		# create comments file
+		path = '/tmp/testmin-comments-' + TestMin.randstr + '.txt'
+		
+		# create file
+		File.open(path, 'w') { |file|
+			file.write(prompt + "\n");
+		}
+		
+		# open editor
+		system(ENV['EDITOR'], path)
+		
+		# read in file
+		results['private']['comments'] = File.read(path)
+		
+		# delete file
+		if File.exist?(path)
+			File.delete(path)
+		end
+		
+		# done
+		return true
+	end
+	#
+	# comments_ask
 	#---------------------------------------------------------------------------
 	
 	
@@ -786,7 +897,7 @@ module TestMin
 			
 			# if line has content, collapse and return it
 			if response.match(/\S/)
-				response = collapse(response)
+				response = TestMin.collapse(response)
 				return response
 			end
 		end
@@ -799,7 +910,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# collapse
 	#
-	def self.collapse(str)
+	def TestMin.collapse(str)
 		# TestMin.hr(__method__.to_s)
 		
 		# only process defined strings
@@ -833,13 +944,16 @@ module TestMin
 			return true
 		end
 		
-		# check if the user wants to submit
+		# check if the user wants to submit the test results
 		if not TestMin.submit_ask()
 			return true
 		end
 		
 		# get email address
 		TestMin.email_ask(results)
+		
+		# get comments
+		TestMin.comments_ask(results)
 		
 		# load some modules
 		require "net/http"
@@ -971,19 +1085,30 @@ module TestMin
 		# initialize dir_order
 		dir_order = 0
 		
+		# initialize success to true
+		success = true
+		
 		# loop through directories
-		run_dirs.each do |dir|
-			# incremement dir_order
-			dir_order = dir_order + 1
-			
-			# run directory
-			if not TestMin.dir_run(log, dir, dir_order)
-				return false
+		mark = Benchmark.measure {
+			run_dirs.each do |dir|
+				# incremement dir_order
+				dir_order = dir_order + 1
+				
+				# run directory
+				success = TestMin.dir_run(log, dir, dir_order)
+				
+				# if not success, we're done looping
+				if not success
+					break
+				end
 			end
-		end
+		}
+		
+		# note run time
+		log['run-time'] = mark.real
 		
 		# success
-		return true
+		return success
 	end
 	#
 	# process_tests
