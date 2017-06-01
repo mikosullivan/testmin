@@ -2,9 +2,9 @@
 require 'json'
 require 'fileutils'
 require 'open3'
-require 'getoptlong'
 require 'benchmark'
 require 'timeout'
+require 'optparse'
 
 
 # TestMin is a simple, minimalist testing framework. TestMin is on GitHub at
@@ -659,10 +659,74 @@ module TestMin
 		
 	
 	#---------------------------------------------------------------------------
+	# val_to_bool
+	#
+	def TestMin.val_to_bool(t)
+		# TestMin.hr(__method__.to_s)
+		
+		# String
+		if t.is_a?(String)
+			t = t.downcase
+			t = t[0,1]
+			
+			# n, f, 0, or empty string
+			if ['n', 'f', '0', ''].include? t
+				return false
+			end
+			
+			# anything else return true
+			return true
+		end
+		
+		# anything else return !!
+		return !!t
+	end
+	#
+	# val_to_bool
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# set_cmd_opts
+	#
+	def TestMin.set_cmd_opts()
+		# TestMin.hr(__method__.to_s)
+		
+		# initialize command line options
+		cmd_opts  = {}
+		
+		# get command line options
+		OptionParser.new do |opts|
+			
+			# submit
+			opts.on("-sSUBMIT", "--submit=SUBMIT", 'If the results should be submitted to the TestMin service') do |bool|
+				bool = TestMin.val_to_bool(bool)
+				
+				# if true, automatically submit results, else don't even ask
+				if bool
+					TestMin.settings['submit']['auto-submit'] = true
+				else
+					TestMin.settings['submit']['request'] = false
+				end
+			end
+		end.parse!
+		
+		# return
+		return cmd_opts
+	end
+	#
+	# set_cmd_opts
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
 	# run_tests
 	#
-	def TestMin.run_tests
-		# TestMin.hr(__method__.to_s)
+	def TestMin.run_tests()
+		TestMin.hr(__method__.to_s)
+		
+		# get command line options
+		TestMin.set_cmd_opts()
 		
 		# initialize log object
 		log = TestMin.create_log()
@@ -704,8 +768,15 @@ module TestMin
 		if @settings.nil?
 			# if config file exists, merge it with
 			if File.exist?(GLOBAL_CONFIG_FILE)
+				# read in configuration file if one exists
 				config = JSON.parse(File.read(GLOBAL_CONFIG_FILE))
+				
+				# merge with default settings
 				@settings = DefaultSettings.deep_merge(config)
+				
+				# turn off auto-submit, that setting can only be set from the
+				# command line
+				@settings.delete('auto-submit')
 			end
 			
 			# if @settings is still nil, just clone DefaultSettings
@@ -765,12 +836,20 @@ module TestMin
 	# submit_ask
 	#
 	def TestMin.submit_ask()
-		# TestMin.hr(__method__.to_s)
+		TestMin.hr(__method__.to_s)
+		
+		# get submit settings
+		submit = TestMin.settings['submit']
+		
+		# if auto-submit, return true
+		if (not submit['auto-submit'].nil?) and (submit['auto-submit'])
+			return true
+		end
 		
 		# get prompt
 		prompt = TestMin.message(
 			'submit-request',
-			'fields' => TestMin.settings['submit'],
+			'fields' => submit,
 		)
 		
 		# get results of user prompt
@@ -1133,12 +1212,13 @@ end
 ################################################################################
 
 
+
 #---------------------------------------------------------------------------
-# run tests
+# run tests if this script was not loaded by another script
 #
 if caller().length <= 0
 	TestMin.run_tests()
 end
 #
-# run tests
+# run tests if this script was not loaded by another script
 #---------------------------------------------------------------------------
