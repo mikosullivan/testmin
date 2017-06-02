@@ -1203,7 +1203,7 @@ end
 #
 class ::Array
 	def show()
-		return '[' + self.join(' | ') + ']'
+		return '[' + self.join('|') + ']'
 	end
 	
 	def Array.as_a(el)
