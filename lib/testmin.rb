@@ -7,30 +7,30 @@ require 'timeout'
 require 'optparse'
 
 
-# TestMin is a simple, minimalist testing framework. TestMin is on GitHub at
-# https://github.com/mikosullivan/testmin
+# Testmin is a simple, minimalist testing framework. Testmin is on GitHub at
+# https://github.com/mikosullivan/Testmin
 
 # note clear as done
-# NOTE: This setting is a leftover from an earlier version of TestMin. For now
-# just leave this line as it is. It won't get in the way of how TestMin works.
+# NOTE: This setting is a leftover from an earlier version of Testmin. For now
+# just leave this line as it is. It won't get in the way of how Testmin works.
 ENV['clear_done'] = '1'
 
 
 
 ################################################################################
-# TestMin
+# Testmin
 #
-module TestMin
+module Testmin
 	
-	# TestMin version
+	# Testmin version
 	VERSION = '0.0.2'
 	
 	# length for horizontal rules
 	HR_LENGTH = 100
 	
 	# directory settings file
-	DIR_SETTINGS_FILE = 'testmin.dir.json'
-	GLOBAL_CONFIG_FILE = './testmin.config.json'
+	DIR_SETTINGS_FILE = 'Testmin.dir.json'
+	GLOBAL_CONFIG_FILE = './Testmin.config.json'
 	
 	# human languages (e.g. english, spanish)
 	# For now we only have English.
@@ -54,7 +54,7 @@ module TestMin
 			'request' => false,
 			'request-email' => false,
 			'request-comments' => false,
-			'url' => 'https://testmin.idocs.com/submit',
+			'url' => 'https://Testmin.idocs.com/submit',
 			'title' => 'Idocs Testmin',
 		},
 		
@@ -85,7 +85,7 @@ module TestMin
 				where they will be publicly available. In addition to the
 				test results, the only information about your system will be
 				the operating system and version, the version of Ruby, and
-				the version of TestMin.
+				the version of Testmin.
 				TEXT
 				
 				# request to add email address
@@ -121,8 +121,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# done
 	#
-	def TestMin.done(opts = {})
-		# TestMin.hr(__method__.to_s)
+	def Testmin.done(opts = {})
+		# Testmin.hr(__method__.to_s)
 		
 		# cannot mark done if _devshortcut_called is true
 		# if Settings['devshortcut_called']
@@ -131,7 +131,7 @@ module TestMin
 		end if
 		
 		# initialize hash
-		opts = {'testmin-success'=>true}.merge(opts)
+		opts = {'Testmin-success'=>true}.merge(opts)
 		
 		# output done hash
 		puts JSON.generate(opts)
@@ -147,7 +147,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# devshortcut
 	#
-	def TestMin.devshortcut()
+	def Testmin.devshortcut()
 		@devshortcut_called = true
 		return false
 	end
@@ -159,8 +159,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# dir_settings
 	#
-	def TestMin.dir_settings(run_dirs, dir_path)
-		# TestMin.hr(dir_path)
+	def Testmin.dir_settings(run_dirs, dir_path)
+		# Testmin.hr(dir_path)
 		
 		# normalize dir_path to remove trailing / if there is one
 		dir_path = dir_path.gsub(/\/+\z/, '')
@@ -187,7 +187,7 @@ module TestMin
 				dir['success'] = false
 				dir['errors'] = [
 					{
-						'id'=>'testmin.dir.json-parse-error',
+						'id'=>'Testmin.dir.json-parse-error',
 						'exception-message' => e.message,
 					}
 				]
@@ -225,8 +225,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# dir_check
 	#
-	def TestMin.dir_check(log, dir)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.dir_check(log, dir)
+		# Testmin.hr(__method__.to_s)
 		
 		# change into test dir
 		Dir.chdir(dir['path']) do
@@ -299,11 +299,11 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# dir_run
 	#
-	def TestMin.dir_run(log, dir, dir_order)
+	def Testmin.dir_run(log, dir, dir_order)
 		# verbosify
 		dir_path_display = dir['path']
 		dir_path_display = dir_path_display.sub(/\A\.\//, '')
-		TestMin.hr('title'=>dir_path_display, 'dash'=>'=')
+		Testmin.hr('title'=>dir_path_display, 'dash'=>'=')
 		
 		# initialize success to true
 		success = true
@@ -332,7 +332,7 @@ module TestMin
 					file_order = file_order + 1
 					
 					# run file
-					success = TestMin.file_run(dir_files, file_path, file_order)
+					success = Testmin.file_run(dir_files, file_path, file_order)
 					
 					# if failure, we're done
 					if not success
@@ -361,10 +361,10 @@ module TestMin
 	# TODO: The code in this routine gets a litle speghettish. Need to clean it
 	# up.
 	#
-	def TestMin.file_run(dir_files, file_path, file_order)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.file_run(dir_files, file_path, file_order)
+		# Testmin.hr(__method__.to_s)
 		
-		# TestMin.hr(file_path)
+		# Testmin.hr(file_path)
 		puts file_path
 		
 		# add to dir files list
@@ -381,13 +381,13 @@ module TestMin
 			# run file with timeout
 			Open3.popen3('./' + file_path) do |stdin, stdout, stderr, thread|
 				begin
-					Timeout::timeout(TestMin.settings['timeout']) {
+					Timeout::timeout(Testmin.settings['timeout']) {
 						debug_stdout = stdout.read.chomp
 						debug_stderr = stderr.read.chomp
 					}
 				rescue
 					Process.kill('KILL', thread.pid)
-					file_log['timed-out'] = TestMin.settings['timeout']
+					file_log['timed-out'] = Testmin.settings['timeout']
 					completed = false
 				rescue
 					completed = false
@@ -398,12 +398,12 @@ module TestMin
 		# if completed
 		if completed
 			# get results
-			results = TestMin.parse_results(debug_stdout)
+			results = Testmin.parse_results(debug_stdout)
 			
 			# determine success
 			if results.is_a?(Hash)
 				# get success
-				success = results.delete('testmin-success')
+				success = results.delete('Testmin-success')
 				
 				# add other elements to details if any
 				if results.any?
@@ -426,12 +426,12 @@ module TestMin
 		if not success
 			# show file output
 			puts
-			TestMin.hr('title'=>TestMin.message('failure'), 'dash'=>'*')
-			TestMin.hr('stdout')
+			Testmin.hr('title'=>Testmin.message('failure'), 'dash'=>'*')
+			Testmin.hr('stdout')
 			puts debug_stdout
-			TestMin.hr('stderr')
+			Testmin.hr('stderr')
 			puts debug_stderr
-			TestMin.hr('dash'=>'*')
+			Testmin.hr('dash'=>'*')
 			puts
 			
 			# add to file log
@@ -450,7 +450,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# os_info
 	#
-	def TestMin.os_info(versions)
+	def Testmin.os_info(versions)
 		os = versions['os'] = {}
 		
 		# kernel version
@@ -469,17 +469,17 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# versions
 	#
-	def TestMin.versions(log)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.versions(log)
+		# Testmin.hr(__method__.to_s)
 		
 		# initliaze versions hash
 		versions = log['versions'] = {}
 		
-		# TestMin version
-		versions['testmin'] = TestMin::VERSION
+		# Testmin version
+		versions['Testmin'] = Testmin::VERSION
 		
 		# OS information
-		TestMin.os_info(versions)
+		Testmin.os_info(versions)
 		
 		# ruby version
 		versions['ruby'] = RUBY_VERSION
@@ -492,8 +492,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# last_line
 	#
-	def TestMin.last_line(str)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.last_line(str)
+		# Testmin.hr(__method__.to_s)
 		
 		# early exit: str is not a string
 		if not str.is_a?(String)
@@ -522,11 +522,11 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# parse_results
 	#
-	def TestMin.parse_results(stdout)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.parse_results(stdout)
+		# Testmin.hr(__method__.to_s)
 		
 		# get last line
-		last_line = TestMin.last_line(stdout)
+		last_line = Testmin.last_line(stdout)
 		
 		# if we got a string
 		if last_line.is_a?(String)
@@ -545,7 +545,7 @@ module TestMin
 			end
 		end
 		
-		# the last line of stdout was not a TestMin results line, so return nil
+		# the last line of stdout was not a Testmin results line, so return nil
 		return nil
 	end
 	#
@@ -556,17 +556,17 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# get_results
 	#
-	def TestMin.get_results(stdout)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.get_results(stdout)
+		# Testmin.hr(__method__.to_s)
 		
 		# get results hash
 		results = parse_results(stdout)
 		
 		# if hash, check for results
 		if results.is_a?(Hash)
-			success = results['testmin-success']
+			success = results['Testmin-success']
 			
-			# if testmin-success is defined
+			# if Testmin-success is defined
 			if (success.is_a?(TrueClass) || success.is_a?(FalseClass))
 				return results
 			end
@@ -583,7 +583,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# create_log
 	#
-	def TestMin.create_log()
+	def Testmin.create_log()
 		# initialize log object
 		log = {}
 		log['id'] = ('a'..'z').to_a.shuffle[0,20].join
@@ -593,17 +593,17 @@ module TestMin
 		log['private'] = {}
 		
 		# get project id if there is one
-		if not TestMin.settings['project-id'].nil?
-			log['project-id'] = TestMin.settings['project-id']
+		if not Testmin.settings['project-id'].nil?
+			log['project-id'] = Testmin.settings['project-id']
 		end
 		
 		# get client id if there is one
-		if not TestMin.settings['client-id'].nil?
-			log['client-id'] = TestMin.settings['client-id']
+		if not Testmin.settings['client-id'].nil?
+			log['client-id'] = Testmin.settings['client-id']
 		end
 		
 		# add system version info
-		TestMin.versions(log)
+		Testmin.versions(log)
 		
 		# return
 		return log
@@ -616,7 +616,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# hr
 	#
-	def TestMin.hr(opts={})
+	def Testmin.hr(opts={})
 		# set opts from scalar or hash
 		if opts.nil?
 			opts = {}
@@ -642,8 +642,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# devexit
 	#
-	def TestMin.devexit()
-		# TestMin.hr(__method__.to_s)
+	def Testmin.devexit()
+		# Testmin.hr(__method__.to_s)
 		puts "\n", '[devexit]'
 		exit
 	end
@@ -655,7 +655,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# randstr
 	#
-	def TestMin.randstr()
+	def Testmin.randstr()
 		return (('a'..'z').to_a + (0..9).to_a).shuffle[0,8].join
 	end
 	#
@@ -666,8 +666,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# val_to_bool
 	#
-	def TestMin.val_to_bool(t)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.val_to_bool(t)
+		# Testmin.hr(__method__.to_s)
 		
 		# String
 		if t.is_a?(String)
@@ -694,8 +694,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# set_cmd_opts
 	#
-	def TestMin.set_cmd_opts()
-		# TestMin.hr(__method__.to_s)
+	def Testmin.set_cmd_opts()
+		# Testmin.hr(__method__.to_s)
 		
 		# initialize command line options
 		cmd_opts  = {}
@@ -704,14 +704,14 @@ module TestMin
 		OptionParser.new do |opts|
 			
 			# submit
-			opts.on("-sSUBMIT", "--submit=SUBMIT", 'If the results should be submitted to the TestMin service') do |bool|
-				bool = TestMin.val_to_bool(bool)
+			opts.on("-sSUBMIT", "--submit=SUBMIT", 'If the results should be submitted to the Testmin service') do |bool|
+				bool = Testmin.val_to_bool(bool)
 				
 				# if true, automatically submit results, else don't even ask
 				if bool
-					TestMin.settings['submit']['auto-submit'] = true
+					Testmin.settings['submit']['auto-submit'] = true
 				else
-					TestMin.settings['submit']['request'] = false
+					Testmin.settings['submit']['request'] = false
 				end
 			end
 		end.parse!
@@ -727,36 +727,36 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# run_tests
 	#
-	def TestMin.run_tests()
-		# TestMin.hr(__method__.to_s)
+	def Testmin.run_tests()
+		# Testmin.hr(__method__.to_s)
 		
 		# get command line options
-		TestMin.set_cmd_opts()
+		Testmin.set_cmd_opts()
 		
 		# initialize log object
-		log = TestMin.create_log()
+		log = Testmin.create_log()
 		
 		# run tests, output results
-		results = TestMin.process_tests(log)
+		results = Testmin.process_tests(log)
 		
 		# verbosify
 		puts()
-		TestMin.hr 'dash'=>'=', 'title'=>TestMin.message('finished-testing')
+		Testmin.hr 'dash'=>'=', 'title'=>Testmin.message('finished-testing')
 		
 		# output succsss|failure
 		if results
-			puts TestMin.message('test-success')
+			puts Testmin.message('test-success')
 		else
-			puts TestMin.message('test-failure')
+			puts Testmin.message('test-failure')
 		end
 		
 		# bottom of section
-		TestMin.hr 'dash'=>'='
+		Testmin.hr 'dash'=>'='
 		puts
 		
-		# send log to TestMin service if necessary
+		# send log to Testmin service if necessary
 		puts
-		TestMin.submit_results(log)
+		Testmin.submit_results(log)
 	end
 	#
 	# run_tests
@@ -766,8 +766,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# settings
 	#
-	def TestMin.settings()
-		# TestMin.hr(__method__.to_s)
+	def Testmin.settings()
+		# Testmin.hr(__method__.to_s)
 		
 		# if @settings is nil, initalize settings
 		if @settings.nil?
@@ -801,8 +801,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# yes_no
 	#
-	def TestMin.yes_no(prompt)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.yes_no(prompt)
+		# Testmin.hr(__method__.to_s)
 		
 		# output prompt
 		print prompt
@@ -810,7 +810,7 @@ module TestMin
 		# get response until it's y or n
 		loop do
 			# output prompt
-			print TestMin.message('yn') + ' '
+			print Testmin.message('yn') + ' '
 			
 			# get response
 			response = $stdin.gets.chomp
@@ -840,11 +840,11 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# submit_ask
 	#
-	def TestMin.submit_ask()
-		TestMin.hr(__method__.to_s)
+	def Testmin.submit_ask()
+		Testmin.hr(__method__.to_s)
 		
 		# get submit settings
-		submit = TestMin.settings['submit']
+		submit = Testmin.settings['submit']
 		
 		# if auto-submit, return true
 		if (not submit['auto-submit'].nil?) and (submit['auto-submit'])
@@ -852,13 +852,13 @@ module TestMin
 		end
 		
 		# get prompt
-		prompt = TestMin.message(
+		prompt = Testmin.message(
 			'submit-request',
 			'fields' => submit,
 		)
 		
 		# get results of user prompt
-		return TestMin.yes_no(prompt)
+		return Testmin.yes_no(prompt)
 	end
 	#
 	# submit_ask
@@ -868,8 +868,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# email_ask
 	#
-	def TestMin.email_ask(results)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.email_ask(results)
+		# Testmin.hr(__method__.to_s)
 		
 		# if not set to submit email, nothing to do
 		if not settings['submit']['request-email']
@@ -877,24 +877,24 @@ module TestMin
 		end
 		
 		# get prompt
-		prompt = TestMin.message(
+		prompt = Testmin.message(
 			'email-request',
-			'fields' => TestMin.settings['submit'],
+			'fields' => Testmin.settings['submit'],
 		)
 		
 		# add a little horizontal space
 		puts
 		
 		# if the user wants to add email
-		if not TestMin.yes_no(prompt)
+		if not Testmin.yes_no(prompt)
 			return true
 		end
 		
 		# build prompt for getting email
-		prompt = TestMin.message('email-prompt')
+		prompt = Testmin.message('email-prompt')
 		
 		# get email
-		email = TestMin.get_line(prompt)
+		email = Testmin.get_line(prompt)
 		
 		# add to private
 		results['private']['email'] = email
@@ -910,8 +910,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# comments_ask
 	#
-	def TestMin.comments_ask(results)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.comments_ask(results)
+		# Testmin.hr(__method__.to_s)
 		
 		# early exit: no editor
 		if ENV['EDITOR'].nil?
@@ -924,24 +924,24 @@ module TestMin
 		end
 		
 		# get prompt
-		prompt = TestMin.message(
+		prompt = Testmin.message(
 			'comments-request',
-			'fields' => TestMin.settings['submit'],
+			'fields' => Testmin.settings['submit'],
 		)
 		
 		# add a little horizontal space
 		puts
 		
 		# if the user wants to add email
-		if not TestMin.yes_no(prompt)
+		if not Testmin.yes_no(prompt)
 			return true
 		end
 		
 		# build prompt for getting email
-		prompt = TestMin.message('add-comments')
+		prompt = Testmin.message('add-comments')
 		
 		# create comments file
-		path = '/tmp/testmin-comments-' + TestMin.randstr + '.txt'
+		path = '/tmp/Testmin-comments-' + Testmin.randstr + '.txt'
 		
 		# create file
 		File.open(path, 'w') { |file|
@@ -970,8 +970,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# get_line
 	#
-	def TestMin.get_line(prompt)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.get_line(prompt)
+		# Testmin.hr(__method__.to_s)
 		
 		# loop until we get a line with some content
 		loop do
@@ -981,7 +981,7 @@ module TestMin
 			
 			# if line has content, collapse and return it
 			if response.match(/\S/)
-				response = TestMin.collapse(response)
+				response = Testmin.collapse(response)
 				return response
 			end
 		end
@@ -994,8 +994,8 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# collapse
 	#
-	def TestMin.collapse(str)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.collapse(str)
+		# Testmin.hr(__method__.to_s)
 		
 		# only process defined strings
 		if str.is_a?(String) and (not str.nil?())
@@ -1017,11 +1017,11 @@ module TestMin
 	# TODO: Need to generalize this routine for submitting to other test
 	# logging sites.
 	#
-	def TestMin.submit_results(results)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.submit_results(results)
+		# Testmin.hr(__method__.to_s)
 		
 		# load settings
-		settings = TestMin.settings
+		settings = Testmin.settings
 		
 		# if not set to submit, nothing to do
 		if not settings['submit']['request']
@@ -1029,15 +1029,15 @@ module TestMin
 		end
 		
 		# check if the user wants to submit the test results
-		if not TestMin.submit_ask()
+		if not Testmin.submit_ask()
 			return true
 		end
 		
 		# get email address
-		TestMin.email_ask(results)
+		Testmin.email_ask(results)
 		
 		# get comments
-		TestMin.comments_ask(results)
+		Testmin.comments_ask(results)
 		
 		# load some modules
 		require "net/http"
@@ -1047,7 +1047,7 @@ module TestMin
 		site = settings['submit']
 		
 		# verbosify
-		puts TestMin.message('submit-hold')
+		puts Testmin.message('submit-hold')
 		
 		# post
 		url = URI.parse(site['url'])
@@ -1062,7 +1062,7 @@ module TestMin
 			
 			# output success or failure
 			if response['success']
-				puts TestMin.message('submit-success')
+				puts Testmin.message('submit-success')
 			else
 				# initialize error array
 				errors = []
@@ -1073,7 +1073,7 @@ module TestMin
 				end
 				
 				# output message
-				puts TestMin.message('submit-failure', {'errors'=>errors.join(', ')})
+				puts Testmin.message('submit-failure', {'errors'=>errors.join(', ')})
 			end
 		else
 			raise "Failed at submitting results. I have not yet implemented giving a good message for this situation yet."
@@ -1092,11 +1092,11 @@ module TestMin
 	#---------------------------------------------------------------------------
 	# message
 	#
-	def TestMin.message(message_id, opts={})
-		# TestMin.hr(__method__.to_s)
+	def Testmin.message(message_id, opts={})
+		# Testmin.hr(__method__.to_s)
 		
 		# default options
-		opts = {'fields'=>{}, 'root'=>TestMin.settings['messages']}.merge(opts)
+		opts = {'fields'=>{}, 'root'=>Testmin.settings['messages']}.merge(opts)
 		fields = opts['fields']
 		root = opts['root']
 		
@@ -1137,21 +1137,21 @@ module TestMin
 	# This routine does the actual job of running the tests. It returns false
 	# when an error is reached. If it gets to the end it returns true.
 	#
-	def TestMin.process_tests(log)
-		# TestMin.hr(__method__.to_s)
+	def Testmin.process_tests(log)
+		# Testmin.hr(__method__.to_s)
 		
 		# get settings
-		# settings = TestMin.load_settings()
+		# settings = Testmin.load_settings()
 		
 		# create test_id
-		ENV['testmin_test_id'] = TestMin.randstr
+		ENV['Testmin_test_id'] = Testmin.randstr
 		
 		# initialize dirs array
 		run_dirs = []
 		
 		# get list of directories
 		Dir.glob('./*/').each do |dir_path|
-			if not TestMin.dir_settings(run_dirs, dir_path)
+			if not Testmin.dir_settings(run_dirs, dir_path)
 				return false
 			end
 		end
@@ -1161,7 +1161,7 @@ module TestMin
 		
 		# check each directory settings
 		run_dirs.each do |dir|
-			if not TestMin.dir_check(log, dir)
+			if not Testmin.dir_check(log, dir)
 				return false
 			end
 		end
@@ -1179,7 +1179,7 @@ module TestMin
 				dir_order = dir_order + 1
 				
 				# run directory
-				success = TestMin.dir_run(log, dir, dir_order)
+				success = Testmin.dir_run(log, dir, dir_order)
 				
 				# if not success, we're done looping
 				if not success
@@ -1199,7 +1199,7 @@ module TestMin
 	#---------------------------------------------------------------------------
 end
 #
-# TestMin
+# Testmin
 ################################################################################
 
 
@@ -1244,7 +1244,7 @@ end
 # run tests if this script was not loaded by another script
 #
 if caller().length <= 0
-	TestMin.run_tests()
+	Testmin.run_tests()
 end
 #
 # run tests if this script was not loaded by another script
