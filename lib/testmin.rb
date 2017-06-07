@@ -29,8 +29,8 @@ module Testmin
 	HR_LENGTH = 100
 	
 	# directory settings file
-	DIR_SETTINGS_FILE = 'Testmin.dir.json'
-	GLOBAL_CONFIG_FILE = './Testmin.config.json'
+	DIR_SETTINGS_FILE = 'testmin.dir.json'
+	GLOBAL_CONFIG_FILE = './testmin.config.json'
 	
 	# human languages (e.g. english, spanish)
 	# For now we only have English.
@@ -54,7 +54,7 @@ module Testmin
 			'request' => false,
 			'request-email' => false,
 			'request-comments' => false,
-			'url' => 'https://Testmin.idocs.com/submit',
+			'url' => 'https://testmin.idocs.com/submit',
 			'title' => 'Idocs Testmin',
 		},
 		
