@@ -23,7 +23,7 @@ ENV['clear_done'] = '1'
 module Testmin
 	
 	# Testmin version
-	VERSION = '0.0.2'
+	VERSION = '0.0.3'
 	
 	# length for horizontal rules
 	HR_LENGTH = 100
@@ -52,10 +52,16 @@ module Testmin
 		# should the user be prompted to submit the test results
 		'submit' => {
 			'request' => false,
-			'request-email' => false,
-			'request-comments' => false,
-			'url' => 'https://testmin.idocs.com/submit',
-			'title' => 'Idocs Testmin',
+			'email' => false,
+			'comments' => false,
+			
+			'site' => {
+				'root' => 'https://testmin.idocs.com',
+				'submit' => '/submit',
+				'project' => '/project',
+				'entry' => '/entry',
+				'title' => 'Idocs Testmin',
+			},
 		},
 		
 		# messages
@@ -131,7 +137,7 @@ module Testmin
 		end if
 		
 		# initialize hash
-		opts = {'Testmin-success'=>true}.merge(opts)
+		opts = {'testmin-success'=>true}.merge(opts)
 		
 		# output done hash
 		puts JSON.generate(opts)
@@ -177,12 +183,9 @@ module Testmin
 		# slurp in settings from directory settings file if it exists
 		if File.exist?(settings_path)
 			begin
-				file_settings = JSON.parse(File.read(settings_path))
-				dir['settings'] = dir['settings'].merge(file_settings)
+				dir_settings = JSON.parse(File.read(settings_path))
+				dir['settings'] = dir['settings'].merge(dir_settings)
 			rescue Exception => e
-				# TESTING
-				# puts 'parse error'
-				
 				# note error in directory log
 				dir['success'] = false
 				dir['errors'] = [
@@ -207,10 +210,10 @@ module Testmin
 		
 		# set default files
 		if dir['settings']['files'].nil?()
-			dir['settings']['files'] = []
+			dir['settings']['files'] = {}
 		else
-			if not dir['settings']['files'].is_a?(Array)
-				raise 'files setting is not an array for ' + dir_path
+			if not dir['settings']['files'].is_a?(Hash)
+				raise 'files setting is not an hash for ' + dir_path
 			end
 		end
 		
@@ -230,15 +233,7 @@ module Testmin
 		
 		# change into test dir
 		Dir.chdir(dir['path']) do
-			in_dir = {}
-			in_settings = {}
-			
-			# build hash of files in settings
-			dir['settings']['files'].each do |file_path|
-				in_settings[file_path] = true
-			end
-			
-			# get list of executable in directory
+			# loop through files in directory
 			Dir.glob('*').each do |file_path|
 				# skip dev files
 				if file_path.match(/\Adev\./)
@@ -255,36 +250,10 @@ module Testmin
 					next
 				end
 				
-				# add to list of files in directory
-				in_dir[file_path] = true
-				
-				# remove from settings
-				in_settings.delete(file_path)
-			end
-			
-			# should not have anything left in in_settings
-			if in_settings.keys.length > 0
-				message = {}
-				message['error'] = true
-				message['id'] = 'non-existent-file'
-				message['dir'] = dir['path']
-				message['files'] = in_settings.keys
-				log['messages'].push(message)
-				log['success'] = false
-				
-				puts 'do not have file(s) in ' + dir['path'] + ': ' + in_settings.keys.join(' ')
-				return false
-			end
-			
-			# loop through files setting, removing existing files from in_dir
-			dir['settings']['files'].each do |file_path|
-				in_dir.delete(file_path)
-			end
-			
-			# add remaining files to files list
-			in_dir.keys.each do |file|
-				puts '*** not in ' + DIR_SETTINGS_FILE + ': ' + dir['path'] + '/' + file
-				dir['settings']['files'].push(file)
+				# if file is not in files hash, add it
+				if not dir['settings']['files'].key?(file_path)
+					dir['settings']['files'][file_path] = true
+				end
 			end
 		end
 		
@@ -327,12 +296,12 @@ module Testmin
 			# run test files in directory
 			mark = Benchmark.measure {
 				# loop through files
-				dir['settings']['files'].each do |file_path|
+				dir['settings']['files'].each do |file_path, file_settings|
 					# increment file order
 					file_order = file_order + 1
 					
 					# run file
-					success = Testmin.file_run(dir_files, file_path, file_order)
+					success = Testmin.file_run(dir_files, file_path, file_settings, file_order)
 					
 					# if failure, we're done
 					if not success
@@ -357,14 +326,49 @@ module Testmin
 	
 	
 	#---------------------------------------------------------------------------
-	# file_run
-	# TODO: The code in this routine gets a litle speghettish. Need to clean it
-	# up.
+	# get_file_settings
 	#
-	def Testmin.file_run(dir_files, file_path, file_order)
+	def Testmin.get_file_settings(file_settings)
 		# Testmin.hr(__method__.to_s)
 		
-		# Testmin.hr(file_path)
+		# if false
+		if file_settings.is_a?(FalseClass)
+			return nil
+		end
+		
+		# if not a hash, make it one
+		if not file_settings.is_a?(Hash)
+			file_settings = {}
+		end
+		
+		# set default file settings
+		file_settings = {'timeout'=>Testmin.settings['timeout']}.merge(file_settings)
+		
+		# return
+		return file_settings
+	end
+	#
+	# get_file_settings
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# file_run
+	# TODO: The code in this routine gets a litle spaghettish. Need to clean it
+	# up.
+	#
+	def Testmin.file_run(dir_files, file_path, file_settings, file_order)
+		# Testmin.hr(__method__.to_s)
+		
+		# get file settings
+		file_settings = Testmin.get_file_settings(file_settings)
+		
+		# if file_settings is nil, don't run this file
+		if file_settings.nil?
+			return true
+		end
+		
+		# verbosify
 		puts file_path
 		
 		# add to dir files list
@@ -403,7 +407,7 @@ module Testmin
 			# determine success
 			if results.is_a?(Hash)
 				# get success
-				success = results.delete('Testmin-success')
+				success = results.delete('testmin-success')
 				
 				# add other elements to details if any
 				if results.any?
@@ -564,9 +568,9 @@ module Testmin
 		
 		# if hash, check for results
 		if results.is_a?(Hash)
-			success = results['Testmin-success']
+			success = results['testmin-success']
 			
-			# if Testmin-success is defined
+			# if testmin-success is defined
 			if (success.is_a?(TrueClass) || success.is_a?(FalseClass))
 				return results
 			end
@@ -841,7 +845,7 @@ module Testmin
 	# submit_ask
 	#
 	def Testmin.submit_ask()
-		Testmin.hr(__method__.to_s)
+		# Testmin.hr(__method__.to_s)
 		
 		# get submit settings
 		submit = Testmin.settings['submit']
@@ -872,7 +876,7 @@ module Testmin
 		# Testmin.hr(__method__.to_s)
 		
 		# if not set to submit email, nothing to do
-		if not settings['submit']['request-email']
+		if not settings['submit']['email']
 			return true
 		end
 		
@@ -919,7 +923,7 @@ module Testmin
 		end
 		
 		# if not set to submit comments, nothing to do
-		if not settings['submit']['request-comments']
+		if not settings['submit']['comments']
 			return true
 		end
 		
@@ -1044,13 +1048,13 @@ module Testmin
 		require "uri"
 		
 		# get site settings
-		site = settings['submit']
+		site = settings['submit']['site']
 		
 		# verbosify
 		puts Testmin.message('submit-hold')
 		
 		# post
-		url = URI.parse(site['url'])
+		url = URI.parse(site['root'] + site['submit'])
 		params = {'test-results': JSON.generate(results)}
 		response = Net::HTTP.post_form(url, params)
 		
