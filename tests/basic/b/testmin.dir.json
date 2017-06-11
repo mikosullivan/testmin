@@ -1,5 +1,6 @@
 {
 	"files":{
-		"b-1.sh":false
+		"b-1.sh":{},
+		"b-2.pl": { "xtimeout":5 }
 	}
 }

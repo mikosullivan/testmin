@@ -1,1 +1,1 @@
-echo "{\"testmin-success\":true}"
+echo '{"testmin-success":true}'

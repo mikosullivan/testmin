@@ -231,6 +231,9 @@ module Testmin
 	def Testmin.dir_check(log, dir)
 		# Testmin.hr(__method__.to_s)
 		
+		# array of files to add to files hash
+		add_files = []
+		
 		# change into test dir
 		Dir.chdir(dir['path']) do
 			# loop through files in directory
@@ -250,11 +253,16 @@ module Testmin
 					next
 				end
 				
-				# if file is not in files hash, add it
+				# if file is not in files hash, add to array of unlisted files
 				if not dir['settings']['files'].key?(file_path)
-					dir['settings']['files'][file_path] = true
+					add_files.push(file_path)
 				end
 			end
+		end
+		
+		# add files not listed in config file
+		add_files.each do |file_path|
+			dir['settings']['files'][file_path] = true
 		end
 		
 		# retutrn success
@@ -385,7 +393,7 @@ module Testmin
 			# run file with timeout
 			Open3.popen3('./' + file_path) do |stdin, stdout, stderr, thread|
 				begin
-					Timeout::timeout(Testmin.settings['timeout']) {
+					Timeout::timeout(file_settings['timeout']) {
 						debug_stdout = stdout.read.chomp
 						debug_stderr = stderr.read.chomp
 					}
