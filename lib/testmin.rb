@@ -165,7 +165,7 @@ module Testmin
 	#---------------------------------------------------------------------------
 	# dir_settings
 	#
-	def Testmin.dir_settings(run_dirs, dir_path)
+	def Testmin.dir_settings(log, run_dirs, dir_path)
 		# Testmin.hr(dir_path)
 		
 		# normalize dir_path to remove trailing / if there is one
@@ -1163,7 +1163,7 @@ module Testmin
 		
 		# get list of directories
 		Dir.glob('./*/').each do |dir_path|
-			if not Testmin.dir_settings(run_dirs, dir_path)
+			if not Testmin.dir_settings(log, run_dirs, dir_path)
 				return false
 			end
 		end
