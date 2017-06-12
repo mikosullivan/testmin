@@ -71,6 +71,7 @@ module Testmin
 				# general purpose messages
 				'success' => 'success',
 				'failure' => 'failure',
+				'yn' => '[Yes|No]',
 				
 				# messages about test results
 				'test-success' => 'All tests run successfully',
@@ -79,10 +80,12 @@ module Testmin
 				
 				# submit messages
 				'email-prompt' => 'email address',
-				'submit-hold' => 'Submitting...',
-				'submit-success' => 'Test results successfully submitted.',
+				'submit-hold' => 'submitting...',
+				'submit-success' => 'done',
 				'submit-failure' => 'Submission of test results failed. Errors: [[errors]]',
 				'add-comments' => 'Add your comments here.',
+				'entry-reference' => 'Test results can be viwed at [[entry-url]]',
+				'project-reference' => 'Project results can be viewed at [[project-url]]',
 				
 				# request to submit results
 				'submit-request' => <<~TEXT,
@@ -106,9 +109,6 @@ module Testmin
 				Would you like to add some comments? Your comments will not
 				be publicly displayed.
 				TEXT
-				
-				# prompts
-				'yn' => '[Yes|No]',
 			},
 			
 			# Spanish
@@ -605,13 +605,8 @@ module Testmin
 		log['private'] = {}
 		
 		# get project id if there is one
-		if not Testmin.settings['project-id'].nil?
-			log['project-id'] = Testmin.settings['project-id']
-		end
-		
-		# get client id if there is one
-		if not Testmin.settings['client-id'].nil?
-			log['client-id'] = Testmin.settings['client-id']
+		if not Testmin.settings['project'].nil?
+			log['project'] = Testmin.settings['project']
 		end
 		
 		# add system version info
@@ -1059,7 +1054,7 @@ module Testmin
 		site = settings['submit']['site']
 		
 		# verbosify
-		puts Testmin.message('submit-hold')
+		print Testmin.message('submit-hold')
 		
 		# post
 		url = URI.parse(site['root'] + site['submit'])
@@ -1074,7 +1069,7 @@ module Testmin
 			
 			# output success or failure
 			if response['success']
-				puts Testmin.message('submit-success')
+				Testmin.submit_success(site, results)
 			else
 				# initialize error array
 				errors = []
@@ -1098,6 +1093,47 @@ module Testmin
 	end
 	#
 	# submit_results
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# submit_success
+	#
+	def Testmin.submit_success(site, results)
+		# Testmin.hr(__method__.to_s)
+		
+		# load cgi libary
+		require 'cgi'
+		
+		# output success
+		puts ' ' + Testmin.message('submit-success')
+		puts
+		
+		# entry link url
+		entry_url =
+			site['root'] +
+			site['entry'] +
+			'?id=' +
+			CGI.escape(results['id'])
+		
+		# entry link
+		puts Testmin.message('entry-reference', 'fields'=>{'entry-url'=>entry_url})
+		
+		# project link
+		if not results['project'].nil?
+			# project link url
+			project_url =
+				site['root'] +
+				site['project'] +
+				'?id=' +
+				CGI.escape(results['project'])
+			
+			# entry link
+			puts Testmin.message('project-reference', 'fields'=>{'project-url'=>project_url})
+		end
+	end
+	#
+	# submit_success
 	#---------------------------------------------------------------------------
 	
 	
