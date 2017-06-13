@@ -4,16 +4,12 @@ require 'fileutils'
 require 'open3'
 require 'benchmark'
 require 'timeout'
+require 'time'
 require 'optparse'
 
 
 # Testmin is a simple, minimalist testing framework. Testmin is on GitHub at
-# https://github.com/mikosullivan/Testmin
-
-# note clear as done
-# NOTE: This setting is a leftover from an earlier version of Testmin. For now
-# just leave this line as it is. It won't get in the way of how Testmin works.
-ENV['clear_done'] = '1'
+# https://github.com/mikosullivan/testmin
 
 
 
@@ -23,7 +19,10 @@ ENV['clear_done'] = '1'
 module Testmin
 	
 	# Testmin version
-	VERSION = '0.0.2'
+	VERSION = '0.0.3'
+	
+	# export Testmin version to environment
+	ENV['TESTMIN'] = VERSION
 	
 	# length for horizontal rules
 	HR_LENGTH = 100
@@ -39,8 +38,16 @@ module Testmin
 	# if devshortcut() has been called
 	@devshortcut_called = false
 	
+	# if Testmin should output directory hr's
+	@dir_hrs = true
+	
 	# settings
 	@settings = nil
+	
+	# exec_file
+	# The realpath to the current executing file
+	@exec_file = File.realpath(__FILE__)
+	
 	
 	#---------------------------------------------------------------------------
 	# DefaultSettings
@@ -52,10 +59,16 @@ module Testmin
 		# should the user be prompted to submit the test results
 		'submit' => {
 			'request' => false,
-			'request-email' => false,
-			'request-comments' => false,
-			'url' => 'https://testmin.idocs.com/submit',
-			'title' => 'Idocs Testmin',
+			'email' => false,
+			'comments' => false,
+			
+			'site' => {
+				'root' => 'https://testmin.idocs.com',
+				'submit' => '/submit',
+				'project' => '/project',
+				'entry' => '/entry',
+				'title' => 'Idocs Testmin',
+			},
 		},
 		
 		# messages
@@ -65,6 +78,9 @@ module Testmin
 				# general purpose messages
 				'success' => 'success',
 				'failure' => 'failure',
+				'yn' => '[Yes|No]',
+				'root-dir' => 'root directory',
+				'running-tests' => 'Running tests',
 				
 				# messages about test results
 				'test-success' => 'All tests run successfully',
@@ -73,10 +89,12 @@ module Testmin
 				
 				# submit messages
 				'email-prompt' => 'email address',
-				'submit-hold' => 'Submitting...',
-				'submit-success' => 'Test results successfully submitted.',
+				'submit-hold' => 'submitting...',
+				'submit-success' => 'done',
 				'submit-failure' => 'Submission of test results failed. Errors: [[errors]]',
 				'add-comments' => 'Add your comments here.',
+				'entry-reference' => 'test results',
+				'project-reference' => 'project results',
 				
 				# request to submit results
 				'submit-request' => <<~TEXT,
@@ -100,9 +118,6 @@ module Testmin
 				Would you like to add some comments? Your comments will not
 				be publicly displayed.
 				TEXT
-				
-				# prompts
-				'yn' => '[Yes|No]',
 			},
 			
 			# Spanish
@@ -131,7 +146,7 @@ module Testmin
 		end if
 		
 		# initialize hash
-		opts = {'Testmin-success'=>true}.merge(opts)
+		opts = {'testmin-success'=>true}.merge(opts)
 		
 		# output done hash
 		puts JSON.generate(opts)
@@ -159,7 +174,7 @@ module Testmin
 	#---------------------------------------------------------------------------
 	# dir_settings
 	#
-	def Testmin.dir_settings(run_dirs, dir_path)
+	def Testmin.dir_settings(log, run_dirs, dir_path)
 		# Testmin.hr(dir_path)
 		
 		# normalize dir_path to remove trailing / if there is one
@@ -177,12 +192,9 @@ module Testmin
 		# slurp in settings from directory settings file if it exists
 		if File.exist?(settings_path)
 			begin
-				file_settings = JSON.parse(File.read(settings_path))
-				dir['settings'] = dir['settings'].merge(file_settings)
+				dir_settings = JSON.parse(File.read(settings_path))
+				dir['settings'] = dir['settings'].merge(dir_settings)
 			rescue Exception => e
-				# TESTING
-				# puts 'parse error'
-				
 				# note error in directory log
 				dir['success'] = false
 				dir['errors'] = [
@@ -207,10 +219,10 @@ module Testmin
 		
 		# set default files
 		if dir['settings']['files'].nil?()
-			dir['settings']['files'] = []
+			dir['settings']['files'] = {}
 		else
-			if not dir['settings']['files'].is_a?(Array)
-				raise 'files setting is not an array for ' + dir_path
+			if not dir['settings']['files'].is_a?(Hash)
+				raise 'files setting is not an hash for ' + dir_path
 			end
 		end
 		
@@ -228,17 +240,22 @@ module Testmin
 	def Testmin.dir_check(log, dir)
 		# Testmin.hr(__method__.to_s)
 		
+		# convenience variables
+		files = dir['settings']['files']
+		
+		# array of files to add to files hash
+		add_files = []
+		
 		# change into test dir
 		Dir.chdir(dir['path']) do
-			in_dir = {}
-			in_settings = {}
-			
-			# build hash of files in settings
-			dir['settings']['files'].each do |file_path|
-				in_settings[file_path] = true
+			# unlist files that don't exist
+			files.keys.each do |file_path|
+				if not File.exist?(file_path)
+					files.delete(file_path)
+				end
 			end
 			
-			# get list of executable in directory
+			# loop through files in directory
 			Dir.glob('*').each do |file_path|
 				# skip dev files
 				if file_path.match(/\Adev\./)
@@ -255,38 +272,23 @@ module Testmin
 					next
 				end
 				
-				# add to list of files in directory
-				in_dir[file_path] = true
+				# don't execute self
+				if File.realpath(file_path) == @exec_file
+					next
+				end
 				
-				# remove from settings
-				in_settings.delete(file_path)
-			end
-			
-			# should not have anything left in in_settings
-			if in_settings.keys.length > 0
-				message = {}
-				message['error'] = true
-				message['id'] = 'non-existent-file'
-				message['dir'] = dir['path']
-				message['files'] = in_settings.keys
-				log['messages'].push(message)
-				log['success'] = false
-				
-				puts 'do not have file(s) in ' + dir['path'] + ': ' + in_settings.keys.join(' ')
-				return false
-			end
-			
-			# loop through files setting, removing existing files from in_dir
-			dir['settings']['files'].each do |file_path|
-				in_dir.delete(file_path)
-			end
-			
-			# add remaining files to files list
-			in_dir.keys.each do |file|
-				puts '*** not in ' + DIR_SETTINGS_FILE + ': ' + dir['path'] + '/' + file
-				dir['settings']['files'].push(file)
+				# if file is not in files hash, add to array of unlisted files
+				if not files.key?(file_path)
+					add_files.push(file_path)
+				end
 			end
 		end
+		
+		# add files not listed in config file
+		add_files.each do |file_path|
+			files[file_path] = true
+		end
+		
 		
 		# retutrn success
 		return true
@@ -301,9 +303,16 @@ module Testmin
 	#
 	def Testmin.dir_run(log, dir, dir_order)
 		# verbosify
-		dir_path_display = dir['path']
-		dir_path_display = dir_path_display.sub(/\A\.\//, '')
-		Testmin.hr('title'=>dir_path_display, 'dash'=>'=')
+		if @dir_hrs
+			if dir['title'].nil?
+				dir_path_display = dir['path']
+				dir_path_display = dir_path_display.sub(/\A\.\//, '')
+			else
+				dir_path_display = dir['title']
+			end
+			
+			Testmin.hr('title'=>dir_path_display, 'dash'=>'=')
+		end
 		
 		# initialize success to true
 		success = true
@@ -327,12 +336,12 @@ module Testmin
 			# run test files in directory
 			mark = Benchmark.measure {
 				# loop through files
-				dir['settings']['files'].each do |file_path|
+				dir['settings']['files'].each do |file_path, file_settings|
 					# increment file order
 					file_order = file_order + 1
 					
 					# run file
-					success = Testmin.file_run(dir_files, file_path, file_order)
+					success = Testmin.file_run(dir_files, file_path, file_settings, file_order)
 					
 					# if failure, we're done
 					if not success
@@ -357,14 +366,49 @@ module Testmin
 	
 	
 	#---------------------------------------------------------------------------
-	# file_run
-	# TODO: The code in this routine gets a litle speghettish. Need to clean it
-	# up.
+	# get_file_settings
 	#
-	def Testmin.file_run(dir_files, file_path, file_order)
+	def Testmin.get_file_settings(file_settings)
 		# Testmin.hr(__method__.to_s)
 		
-		# Testmin.hr(file_path)
+		# if false
+		if file_settings.is_a?(FalseClass)
+			return nil
+		end
+		
+		# if not a hash, make it one
+		if not file_settings.is_a?(Hash)
+			file_settings = {}
+		end
+		
+		# set default file settings
+		file_settings = {'timeout'=>Testmin.settings['timeout']}.merge(file_settings)
+		
+		# return
+		return file_settings
+	end
+	#
+	# get_file_settings
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# file_run
+	# TODO: The code in this routine gets a litle spaghettish. Need to clean it
+	# up.
+	#
+	def Testmin.file_run(dir_files, file_path, file_settings, file_order)
+		# Testmin.hr(__method__.to_s)
+		
+		# get file settings
+		file_settings = Testmin.get_file_settings(file_settings)
+		
+		# if file_settings is nil, don't run this file
+		if file_settings.nil?
+			return true
+		end
+		
+		# verbosify
 		puts file_path
 		
 		# add to dir files list
@@ -381,7 +425,7 @@ module Testmin
 			# run file with timeout
 			Open3.popen3('./' + file_path) do |stdin, stdout, stderr, thread|
 				begin
-					Timeout::timeout(Testmin.settings['timeout']) {
+					Timeout::timeout(file_settings['timeout']) {
 						debug_stdout = stdout.read.chomp
 						debug_stderr = stderr.read.chomp
 					}
@@ -403,7 +447,7 @@ module Testmin
 			# determine success
 			if results.is_a?(Hash)
 				# get success
-				success = results.delete('Testmin-success')
+				success = results.delete('testmin-success')
 				
 				# add other elements to details if any
 				if results.any?
@@ -564,9 +608,9 @@ module Testmin
 		
 		# if hash, check for results
 		if results.is_a?(Hash)
-			success = results['Testmin-success']
+			success = results['testmin-success']
 			
-			# if Testmin-success is defined
+			# if testmin-success is defined
 			if (success.is_a?(TrueClass) || success.is_a?(FalseClass))
 				return results
 			end
@@ -586,20 +630,16 @@ module Testmin
 	def Testmin.create_log()
 		# initialize log object
 		log = {}
-		log['id'] = ('a'..'z').to_a.shuffle[0,20].join
+		log['id'] = ('a'..'z').to_a.shuffle[0,10].join
 		log['success'] = true
 		log['messages'] = []
 		log['dirs'] = {}
 		log['private'] = {}
+		log['timestamp'] = Time.new.to_s
 		
 		# get project id if there is one
-		if not Testmin.settings['project-id'].nil?
-			log['project-id'] = Testmin.settings['project-id']
-		end
-		
-		# get client id if there is one
-		if not Testmin.settings['client-id'].nil?
-			log['client-id'] = Testmin.settings['client-id']
+		if not Testmin.settings['project'].nil?
+			log['project'] = Testmin.settings['project']
 		end
 		
 		# add system version info
@@ -841,7 +881,7 @@ module Testmin
 	# submit_ask
 	#
 	def Testmin.submit_ask()
-		Testmin.hr(__method__.to_s)
+		# Testmin.hr(__method__.to_s)
 		
 		# get submit settings
 		submit = Testmin.settings['submit']
@@ -854,7 +894,7 @@ module Testmin
 		# get prompt
 		prompt = Testmin.message(
 			'submit-request',
-			'fields' => submit,
+			'fields' => submit['site'],
 		)
 		
 		# get results of user prompt
@@ -872,7 +912,7 @@ module Testmin
 		# Testmin.hr(__method__.to_s)
 		
 		# if not set to submit email, nothing to do
-		if not settings['submit']['request-email']
+		if not settings['submit']['email']
 			return true
 		end
 		
@@ -919,7 +959,7 @@ module Testmin
 		end
 		
 		# if not set to submit comments, nothing to do
-		if not settings['submit']['request-comments']
+		if not settings['submit']['comments']
 			return true
 		end
 		
@@ -1013,6 +1053,40 @@ module Testmin
 	
 	
 	#---------------------------------------------------------------------------
+	# print_table
+	#
+	def Testmin.print_table(table)
+		# initialize widths array
+		widths = []
+		
+		# calculate maximum widths
+		table.each{|line|
+			c = 0
+			
+			# loop through columns
+			line.each{|col|
+				widths[c] = (widths[c] && widths[c] > col.length) ? widths[c] : col.length
+				c += 1
+			}
+		}
+		
+		# print each line
+		table.each do |line|
+			# print each column
+			line.each_with_index do |col, index|
+				print col.ljust(widths[index]) + '  '
+			end
+			
+			# add newline
+			print "\n"
+		end
+	end
+	#
+	# print_table
+	#---------------------------------------------------------------------------
+	
+
+	#---------------------------------------------------------------------------
 	# submit_results
 	# TODO: Need to generalize this routine for submitting to other test
 	# logging sites.
@@ -1044,13 +1118,13 @@ module Testmin
 		require "uri"
 		
 		# get site settings
-		site = settings['submit']
+		site = settings['submit']['site']
 		
 		# verbosify
-		puts Testmin.message('submit-hold')
+		print Testmin.message('submit-hold')
 		
 		# post
-		url = URI.parse(site['url'])
+		url = URI.parse(site['root'] + site['submit'])
 		params = {'test-results': JSON.generate(results)}
 		response = Net::HTTP.post_form(url, params)
 		
@@ -1062,7 +1136,7 @@ module Testmin
 			
 			# output success or failure
 			if response['success']
-				puts Testmin.message('submit-success')
+				Testmin.submit_success(site, results)
 			else
 				# initialize error array
 				errors = []
@@ -1086,6 +1160,59 @@ module Testmin
 	end
 	#
 	# submit_results
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# submit_success
+	#
+	def Testmin.submit_success(site, results)
+		# Testmin.hr(__method__.to_s)
+		
+		# load cgi libary
+		require 'cgi'
+		
+		# output success
+		puts ' ' + Testmin.message('submit-success')
+		puts
+		
+		# initialize table
+		table = []
+		
+		# entry link url
+		entry_url =
+			site['root'] +
+			site['entry'] +
+			'?id=' +
+			CGI.escape(results['id'])
+		
+		# entry link
+		table.push([
+			Testmin.message('entry-reference') + ':',
+			entry_url
+		])
+		
+		# project link
+		if not results['project'].nil?
+			# project link url
+			project_url =
+				site['root'] +
+				site['project'] +
+				'?id=' +
+				CGI.escape(results['project'])
+			
+			# entry link
+			table.push([
+				Testmin.message('project-reference') + ':',
+				project_url
+			])
+		end
+		
+		# output urls
+		Testmin.print_table(table)
+	end
+	#
+	# submit_success
 	#---------------------------------------------------------------------------
 	
 	
@@ -1149,9 +1276,19 @@ module Testmin
 		# initialize dirs array
 		run_dirs = []
 		
+		# start with current directory
+		if not Testmin.dir_settings(log, run_dirs, './')
+			return false
+		end
+		
+		# prettify dir settings for current directory
+		if run_dirs[0]['title'].nil?
+			run_dirs[0]['title'] = '[' + Testmin.message('root-dir') + ']'
+		end
+		
 		# get list of directories
 		Dir.glob('./*/').each do |dir_path|
-			if not Testmin.dir_settings(run_dirs, dir_path)
+			if not Testmin.dir_settings(log, run_dirs, dir_path)
 				return false
 			end
 		end
@@ -1166,11 +1303,19 @@ module Testmin
 			end
 		end
 		
+		# if only the root directory, don't bother outputting the HR for it
+		if run_dirs.length == 1
+			@dir_hrs = false
+		end
+		
 		# initialize dir_order
 		dir_order = 0
 		
 		# initialize success to true
 		success = true
+		
+		# verbosify
+		puts Testmin.message('running-tests')
 		
 		# loop through directories
 		mark = Benchmark.measure {

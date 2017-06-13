@@ -1,0 +1,9 @@
+{
+	"submit" : {
+		"request":true,
+		"email":false,
+		"comments":false
+	},
+	
+	"project" : "testmin.idocs.com"
+}

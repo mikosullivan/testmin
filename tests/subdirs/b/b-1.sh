@@ -1,0 +1,1 @@
+echo '{"testmin-success":true}'
