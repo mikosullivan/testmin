@@ -19,7 +19,7 @@ require 'optparse'
 module Testmin
 	
 	# Testmin version
-	VERSION = '0.0.3'
+	VERSION = '0.0.4'
 	
 	# export Testmin version to environment
 	ENV['TESTMIN'] = VERSION
@@ -215,7 +215,12 @@ module Testmin
 		
 		# set default dir-order
 		if dir['settings']['dir-order'].nil?()
-			dir['settings']['dir-order'] = 1000000
+			# special case: root dir defaults to -1 in order
+			if dir_path == '.'
+				dir['settings']['dir-order'] = -1
+			else
+				dir['settings']['dir-order'] = 1000000
+			end
 		end
 		
 		# set default files
@@ -762,7 +767,7 @@ module Testmin
 			submit = Testmin.settings['submit']
 			
 			# submit
-			opts.on("-sSUBMIT", "--submit=SUBMIT", 'If the results should be submitted to the Testmin service') do |bool|
+			opts.on("-sSUBMIT", "--submit = y|n", 'submit results to the Testmin service') do |bool|
 				bool = Testmin.val_to_bool(bool)
 				
 				# if true, automatically submit results, else don't even ask
@@ -775,7 +780,7 @@ module Testmin
 			end
 			
 			# email
-			opts.on("-eEMAIL", "--email=EMAIL", 'If Testmin should ask for an email address') do |bool|
+			opts.on("-eEMAIL", "--email = y|n", 'ask for an email address') do |bool|
 				bool = Testmin.val_to_bool(bool)
 				
 				# if false, set email to false
@@ -785,7 +790,7 @@ module Testmin
 			end
 			
 			# comments
-			opts.on("-cCOMMENTS", "--comments=COMMENTS", 'If Testmin should ask for comments') do |bool|
+			opts.on("-cy|n", "--comments = y|n", 'ask for comments') do |bool|
 				bool = Testmin.val_to_bool(bool)
 				
 				# if false, set comments to false
@@ -795,7 +800,7 @@ module Testmin
 			end
 			
 			# silent
-			opts.on("-vSILENT", "--silent=SILENT", 'If Testmin should run silently') do |bool|
+			opts.on("-v", "--silent", 'run silently') do |bool|
 				bool = Testmin.val_to_bool(bool)
 				
 				# if false, set comments to false
