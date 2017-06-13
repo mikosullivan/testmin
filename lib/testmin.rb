@@ -13,7 +13,7 @@ require 'optparse'
 # note clear as done
 # NOTE: This setting is a leftover from an earlier version of Testmin. For now
 # just leave this line as it is. It won't get in the way of how Testmin works.
-ENV['clear_done'] = '1'
+ENV['CLEAR_DONE'] = '1'
 
 
 
@@ -231,11 +231,21 @@ module Testmin
 	def Testmin.dir_check(log, dir)
 		# Testmin.hr(__method__.to_s)
 		
+		# convenience variables
+		files = dir['settings']['files']
+		
 		# array of files to add to files hash
 		add_files = []
 		
 		# change into test dir
 		Dir.chdir(dir['path']) do
+			# unlist files that don't exist
+			files.keys.each do |file_path|
+				if not File.exist?(file_path)
+					files.delete(file_path)
+				end
+			end
+			
 			# loop through files in directory
 			Dir.glob('*').each do |file_path|
 				# skip dev files
@@ -254,7 +264,7 @@ module Testmin
 				end
 				
 				# if file is not in files hash, add to array of unlisted files
-				if not dir['settings']['files'].key?(file_path)
+				if not files.key?(file_path)
 					add_files.push(file_path)
 				end
 			end
@@ -262,7 +272,7 @@ module Testmin
 		
 		# add files not listed in config file
 		add_files.each do |file_path|
-			dir['settings']['files'][file_path] = true
+			files[file_path] = true
 		end
 		
 		# retutrn success
