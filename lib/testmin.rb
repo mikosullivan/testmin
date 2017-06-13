@@ -81,6 +81,7 @@ module Testmin
 				'yn' => '[Yes|No]',
 				'root-dir' => 'root directory',
 				'running-tests' => 'Running tests',
+				'no-files-to-run' => 'no files to run',
 				
 				# messages about test results
 				'test-success' => 'All tests run successfully',
@@ -89,7 +90,7 @@ module Testmin
 				
 				# submit messages
 				'email-prompt' => 'email address',
-				'submit-hold' => 'submitting...',
+				'submit-hold' => 'submitting',
 				'submit-success' => 'done',
 				'submit-failure' => 'Submission of test results failed. Errors: [[errors]]',
 				'add-comments' => 'Add your comments here.',
@@ -149,7 +150,7 @@ module Testmin
 		opts = {'testmin-success'=>true}.merge(opts)
 		
 		# output done hash
-		puts JSON.generate(opts)
+		Testmin.v JSON.generate(opts)
 		
 		# exit
 		exit
@@ -302,6 +303,8 @@ module Testmin
 	# dir_run
 	#
 	def Testmin.dir_run(log, dir, dir_order)
+		# Testmin.hr(__method__.to_s)
+		
 		# verbosify
 		if @dir_hrs
 			if dir['title'].nil?
@@ -322,11 +325,14 @@ module Testmin
 		dir_log = {'dir_order'=>dir_order, 'files'=>dir_files}
 		log['dirs'][dir_path_display] = dir_log
 		
-		# skip if marked to do si
+		# skip if marked to do so
 		if dir['skip']
-			puts "*** skipping ***\n\n"
+			Testmin.v "*** skipping ***\n\n"
 			return true
 		end
+		
+		# initialize files_run
+		files_run = 0
 		
 		# change into test dir, run files
 		Dir.chdir(dir['path']) do
@@ -343,6 +349,11 @@ module Testmin
 					# run file
 					success = Testmin.file_run(dir_files, file_path, file_settings, file_order)
 					
+					# if file_settings isn't the false object, increment files_run
+					if not file_settings.is_a?(FalseClass)
+						files_run += 1
+					end
+					
 					# if failure, we're done
 					if not success
 						break
@@ -350,12 +361,17 @@ module Testmin
 				end
 			}
 			
+			# note if no files run
+			if files_run == 0
+				Testmin.v Testmin.message('no-files-to-run')
+			end
+			
 			# note run-time
 			dir_log['run-time'] = mark.real
 		end
 		
 		# add a little room underneath dir
-		puts
+		Testmin.v
 		
 		# return success
 		return success
@@ -409,7 +425,7 @@ module Testmin
 		end
 		
 		# verbosify
-		puts file_path
+		Testmin.v file_path
 		
 		# add to dir files list
 		file_log = {'file_order'=>file_order}
@@ -469,14 +485,14 @@ module Testmin
 		# if failure
 		if not success
 			# show file output
-			puts
+			Testmin.v
 			Testmin.hr('title'=>Testmin.message('failure'), 'dash'=>'*')
 			Testmin.hr('stdout')
-			puts debug_stdout
+			Testmin.v debug_stdout
 			Testmin.hr('stderr')
-			puts debug_stderr
+			Testmin.v debug_stderr
 			Testmin.hr('dash'=>'*')
-			puts
+			Testmin.v
 			
 			# add to file log
 			file_log['stdout'] = debug_stdout
@@ -669,9 +685,9 @@ module Testmin
 		
 		# output
 		if opts['title'] == ''
-			puts opts['dash'] * HR_LENGTH
+			Testmin.v opts['dash'] * HR_LENGTH
 		else
-			puts (opts['dash'] * 3) + ' ' + opts['title'] + ' ' + (opts['dash'] * (HR_LENGTH - 5 - opts['title'].length))
+			Testmin.v (opts['dash'] * 3) + ' ' + opts['title'] + ' ' + (opts['dash'] * (HR_LENGTH - 5 - opts['title'].length))
 		end
 	end
 	#
@@ -684,7 +700,7 @@ module Testmin
 	#
 	def Testmin.devexit()
 		# Testmin.hr(__method__.to_s)
-		puts "\n", '[devexit]'
+		Testmin.v "\n", '[devexit]'
 		exit
 	end
 	#
@@ -742,6 +758,8 @@ module Testmin
 		
 		# get command line options
 		OptionParser.new do |opts|
+			# convenience
+			submit = Testmin.settings['submit']
 			
 			# submit
 			opts.on("-sSUBMIT", "--submit=SUBMIT", 'If the results should be submitted to the Testmin service') do |bool|
@@ -749,9 +767,50 @@ module Testmin
 				
 				# if true, automatically submit results, else don't even ask
 				if bool
-					Testmin.settings['submit']['auto-submit'] = true
+					submit['auto-submit'] = true
 				else
-					Testmin.settings['submit']['request'] = false
+					submit['auto-submit'] = false
+					submit['request'] = false
+				end
+			end
+			
+			# email
+			opts.on("-eEMAIL", "--email=EMAIL", 'If Testmin should ask for an email address') do |bool|
+				bool = Testmin.val_to_bool(bool)
+				
+				# if false, set email to false
+				if not bool
+					submit['email'] = false
+				end
+			end
+			
+			# comments
+			opts.on("-cCOMMENTS", "--comments=COMMENTS", 'If Testmin should ask for comments') do |bool|
+				bool = Testmin.val_to_bool(bool)
+				
+				# if false, set comments to false
+				if not bool
+					submit['comments'] = false
+				end
+			end
+			
+			# silent
+			opts.on("-vSILENT", "--silent=SILENT", 'If Testmin should run silently') do |bool|
+				bool = Testmin.val_to_bool(bool)
+				
+				# if false, set comments to false
+				if bool
+					# set silent setting
+					Testmin.settings['silent'] = true
+					
+					# if submit wasn't explicitly set, default to true
+					if submit['auto-submit'].nil?
+						submit['auto-submit'] = true
+					end
+					
+					# don't request email or comments
+					submit['email'] = false
+					submit['comments'] = false
 				end
 			end
 		end.parse!
@@ -761,6 +820,44 @@ module Testmin
 	end
 	#
 	# set_cmd_opts
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# v (verbose)
+	#
+	def Testmin.v(str = '')
+		# Testmin.hr(__method__.to_s)
+		
+		# if silent, do nothing
+		if Testmin.settings['silent']
+			return
+		end
+		
+		# output string
+		puts str
+	end
+	#
+	# v (verbose)
+	#---------------------------------------------------------------------------
+	
+	
+	#---------------------------------------------------------------------------
+	# vp (verbose print)
+	#
+	def Testmin.vp(str = '')
+		# Testmin.hr(__method__.to_s)
+		
+		# if silent, do nothing
+		if Testmin.settings['silent']
+			return
+		end
+		
+		# output string
+		print str
+	end
+	#
+	# vp (verbose print)
 	#---------------------------------------------------------------------------
 	
 	
@@ -780,22 +877,22 @@ module Testmin
 		results = Testmin.process_tests(log)
 		
 		# verbosify
-		puts()
+		Testmin.v()
 		Testmin.hr 'dash'=>'=', 'title'=>Testmin.message('finished-testing')
 		
 		# output succsss|failure
 		if results
-			puts Testmin.message('test-success')
+			Testmin.v Testmin.message('test-success')
 		else
-			puts Testmin.message('test-failure')
+			Testmin.v Testmin.message('test-failure')
 		end
 		
 		# bottom of section
 		Testmin.hr 'dash'=>'='
-		puts
+		Testmin.v
 		
 		# send log to Testmin service if necessary
-		puts
+		Testmin.v
 		Testmin.submit_results(log)
 	end
 	#
@@ -819,9 +916,9 @@ module Testmin
 				# merge with default settings
 				@settings = DefaultSettings.deep_merge(config)
 				
-				# turn off auto-submit, that setting can only be set from the
-				# command line
+				# turn off settings that can only be set from the command line
 				@settings.delete('auto-submit')
+				@settings.delete('silent')
 			end
 			
 			# if @settings is still nil, just clone DefaultSettings
@@ -923,7 +1020,7 @@ module Testmin
 		)
 		
 		# add a little horizontal space
-		puts
+		Testmin.v
 		
 		# if the user wants to add email
 		if not Testmin.yes_no(prompt)
@@ -970,7 +1067,7 @@ module Testmin
 		)
 		
 		# add a little horizontal space
-		puts
+		Testmin.v
 		
 		# if the user wants to add email
 		if not Testmin.yes_no(prompt)
@@ -1074,11 +1171,11 @@ module Testmin
 		table.each do |line|
 			# print each column
 			line.each_with_index do |col, index|
-				print col.ljust(widths[index]) + '  '
+				Testmin.vp col.ljust(widths[index]) + '  '
 			end
 			
 			# add newline
-			print "\n"
+			Testmin.vp "\n"
 		end
 	end
 	#
@@ -1121,7 +1218,8 @@ module Testmin
 		site = settings['submit']['site']
 		
 		# verbosify
-		print Testmin.message('submit-hold')
+		Testmin.v
+		Testmin.vp Testmin.message('submit-hold') + '...'
 		
 		# post
 		url = URI.parse(site['root'] + site['submit'])
@@ -1131,7 +1229,6 @@ module Testmin
 		# check results
 		if response.is_a?(Net::HTTPOK)
 			# parse json response
-			# response = response.body.gsub(/\A.*\n\n/, '')
 			response = JSON.parse(response.body)
 			
 			# output success or failure
@@ -1147,7 +1244,7 @@ module Testmin
 				end
 				
 				# output message
-				puts Testmin.message('submit-failure', {'errors'=>errors.join(', ')})
+				Testmin.v Testmin.message('submit-failure', {'errors'=>errors.join(', ')})
 			end
 		else
 			raise "Failed at submitting results. I have not yet implemented giving a good message for this situation yet."
@@ -1173,8 +1270,8 @@ module Testmin
 		require 'cgi'
 		
 		# output success
-		puts ' ' + Testmin.message('submit-success')
-		puts
+		Testmin.v ' ' + Testmin.message('submit-success')
+		Testmin.v
 		
 		# initialize table
 		table = []
@@ -1227,9 +1324,6 @@ module Testmin
 		fields = opts['fields']
 		root = opts['root']
 		
-		# TESTING
-		# @human_languages = ['xx']
-		
 		# loop through languages
 		@human_languages.each do |language|
 			# if the template exists in this language
@@ -1267,11 +1361,8 @@ module Testmin
 	def Testmin.process_tests(log)
 		# Testmin.hr(__method__.to_s)
 		
-		# get settings
-		# settings = Testmin.load_settings()
-		
 		# create test_id
-		ENV['Testmin_test_id'] = Testmin.randstr
+		ENV['testmin_test_id'] = Testmin.randstr
 		
 		# initialize dirs array
 		run_dirs = []
@@ -1315,7 +1406,7 @@ module Testmin
 		success = true
 		
 		# verbosify
-		puts Testmin.message('running-tests')
+		Testmin.v Testmin.message('running-tests')
 		
 		# loop through directories
 		mark = Benchmark.measure {
