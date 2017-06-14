@@ -48,6 +48,11 @@ module Testmin
 	# The realpath to the current executing file
 	@exec_file = File.realpath(__FILE__)
 	
+	# submit settings
+	@auto = false
+	@silent = false
+	@user_email = nil
+	
 	
 	#---------------------------------------------------------------------------
 	# DefaultSettings
@@ -766,57 +771,35 @@ module Testmin
 			# convenience
 			submit = Testmin.settings['submit']
 			
-			# submit
-			opts.on("-sSUBMIT", "--submit = y|n", 'submit results to the Testmin service') do |bool|
-				bool = Testmin.val_to_bool(bool)
-				
-				# if true, automatically submit results, else don't even ask
-				if bool
-					submit['auto-submit'] = true
-				else
-					submit['auto-submit'] = false
-					submit['request'] = false
-				end
-			end
-			
 			# email
-			opts.on("-eEMAIL", "--email = y|n", 'ask for an email address') do |bool|
-				bool = Testmin.val_to_bool(bool)
-				
-				# if false, set email to false
-				if not bool
-					submit['email'] = false
+			opts.on("-eEMAIL", "--email = email|n", 'ask for an email address') do |val|
+				# only bother with these settings if asking for email
+				if submit['email']
+					bool = val.downcase
+					
+					# if false, set email to false
+					if (bool == 'n') or (bool == '0') or (bool == 'f')
+						submit['email'] = false
+					else
+						@user_email = val
+					end
 				end
 			end
 			
 			# comments
-			opts.on("-cy|n", "--comments = y|n", 'ask for comments') do |bool|
-				bool = Testmin.val_to_bool(bool)
-				
-				# if false, set comments to false
-				if not bool
-					submit['comments'] = false
-				end
+			opts.on('-z', '--no-comments', 'do  not prompt for comments') do |bool|
+				submit['comments'] = false
+			end
+			
+			# auto
+			opts.on("-a", "--auto", 'run automatically, accept defaults') do
+				@auto = true
 			end
 			
 			# silent
-			opts.on("-v", "--silent", 'run silently') do |bool|
-				bool = Testmin.val_to_bool(bool)
-				
-				# if false, set comments to false
-				if bool
-					# set silent setting
-					Testmin.settings['silent'] = true
-					
-					# if submit wasn't explicitly set, default to true
-					if submit['auto-submit'].nil?
-						submit['auto-submit'] = true
-					end
-					
-					# don't request email or comments
-					submit['email'] = false
-					submit['comments'] = false
-				end
+			opts.on("-v", "--silent", 'run silently') do
+				@auto = true
+				@silent = true
 			end
 		end.parse!
 		
@@ -835,7 +818,7 @@ module Testmin
 		# Testmin.hr(__method__.to_s)
 		
 		# if silent, do nothing
-		if Testmin.settings['silent']
+		if @silent
 			return
 		end
 		
@@ -854,7 +837,7 @@ module Testmin
 		# Testmin.hr(__method__.to_s)
 		
 		# if silent, do nothing
-		if Testmin.settings['silent']
+		if @silent
 			return
 		end
 		
@@ -920,10 +903,6 @@ module Testmin
 				
 				# merge with default settings
 				@settings = DefaultSettings.deep_merge(config)
-				
-				# turn off settings that can only be set from the command line
-				@settings.delete('auto-submit')
-				@settings.delete('silent')
 			end
 			
 			# if @settings is still nil, just clone DefaultSettings
@@ -985,13 +964,13 @@ module Testmin
 	def Testmin.submit_ask()
 		# Testmin.hr(__method__.to_s)
 		
-		# get submit settings
-		submit = Testmin.settings['submit']
-		
-		# if auto-submit, return true
-		if (not submit['auto-submit'].nil?) and (submit['auto-submit'])
+		# if automatic, return true
+		if @auto
 			return true
 		end
+		
+		# get submit settings
+		submit = Testmin.settings['submit']
 		
 		# get prompt
 		prompt = Testmin.message(
@@ -1013,33 +992,38 @@ module Testmin
 	def Testmin.email_ask(results)
 		# Testmin.hr(__method__.to_s)
 		
+		# convenience
+		submit = Testmin.settings['submit']
+		
 		# if not set to submit email, nothing to do
-		if not settings['submit']['email']
+		if not submit['email']
 			return true
 		end
 		
-		# get prompt
-		prompt = Testmin.message(
-			'email-request',
-			'fields' => Testmin.settings['submit'],
-		)
-		
-		# add a little horizontal space
-		Testmin.v
-		
-		# if the user wants to add email
-		if not Testmin.yes_no(prompt)
-			return true
+		# if user gave email in command line
+		if not @user_email.nil?
+			results['private']['email'] = @user_email
+		elsif not @auto
+			# get prompt
+			prompt = Testmin.message(
+				'email-request',
+				'fields' => submit,
+			)
+			
+			# add a little horizontal space
+			Testmin.v
+			
+			# if the user wants to add email
+			if not Testmin.yes_no(prompt)
+				return true
+			end
+			
+			# build prompt for getting email
+			prompt = Testmin.message('email-prompt')
+			
+			# get email
+			results['private']['email'] = Testmin.get_line(prompt)
 		end
-		
-		# build prompt for getting email
-		prompt = Testmin.message('email-prompt')
-		
-		# get email
-		email = Testmin.get_line(prompt)
-		
-		# add to private
-		results['private']['email'] = email
 		
 		# done
 		return true
@@ -1055,28 +1039,36 @@ module Testmin
 	def Testmin.comments_ask(results)
 		# Testmin.hr(__method__.to_s)
 		
+		# convenience
+		submit = settings['submit']
+		
+		# if not set to submit comments, nothing to do
+		if not submit['comments']
+			return
+		end
+		
+		# if automatic, nothing to do here
+		if @auto
+			return
+		end
+		
 		# early exit: no editor
 		if ENV['EDITOR'].nil?
 			return
 		end
 		
-		# if not set to submit comments, nothing to do
-		if not settings['submit']['comments']
-			return true
-		end
-		
 		# get prompt
 		prompt = Testmin.message(
 			'comments-request',
-			'fields' => Testmin.settings['submit'],
+			'fields' => submit,
 		)
 		
 		# add a little horizontal space
 		Testmin.v
 		
-		# if the user wants to add email
+		# if the user does not want to add comments
 		if not Testmin.yes_no(prompt)
-			return true
+			return
 		end
 		
 		# build prompt for getting email
@@ -1102,7 +1094,7 @@ module Testmin
 		end
 		
 		# done
-		return true
+		return
 	end
 	#
 	# comments_ask
