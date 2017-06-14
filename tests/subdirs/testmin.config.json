@@ -1,6 +1,7 @@
 {
 	"submit" : {
-		"request":true
+		"request":true,
+		"email":false
 	},
 	
 	"project" : "testmin.idocs.com"
